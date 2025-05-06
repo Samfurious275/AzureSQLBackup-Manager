@@ -1,5 +1,4 @@
 name: Azure SQL Backup Manager CI/CD (Terraform)
-
 on:
   push:
     branches:
@@ -13,15 +12,15 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-
-      - name: Terraform Init
+      - name: Change to Terraform Dir
         run: |
+          cd terraform
           terraform init
+
   terraform_plan:
     needs: terraform_init
     runs-on: ubuntu-latest
@@ -32,6 +31,10 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+      - name: Change to Terraform Dir
+        run: |
+          cd terraform
+          terraform init
       - name: Terraform Plan
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -39,7 +42,7 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
-          cd terraform  # ✅ Move into the Terraform directory
+          cd terraform
           terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
 
   terraform_apply:
@@ -53,6 +56,10 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+      - name: Change to Terraform Dir
+        run: |
+          cd terraform
+          terraform init
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -60,50 +67,65 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
-          cd terraform  # ✅ Move into the Terraform directory
+          cd terraform
           terraform apply -auto-approve tfplan
-          
+
   nightly_backup:
+    needs: terraform_apply
     runs-on: ubuntu-latest
     environment: Production
-    needs: terraform_apply
     if: github.event_name == 'schedule'
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+      - name: Initialize Terraform
+        run: |
+          cd terraform
+          terraform init
+      - name: Export Resource Group Name
+        run: |
+          cd terraform
+          echo "RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)" >> $GITHUB_ENV
+      - name: Export Storage Account Name
+        run: |
+          cd terraform
+          echo "STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> $GITHUB_ENV
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Deploy Function App
         run: |
+          cd terraform
           az functionapp deployment source config-zip \
-            --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+            --resource-group "$RESOURCE_GROUP_NAME" \
             --name my-sql-backup-function \
-            --src src/Backup-SqlDatabase.ps1
-
+            --src ../src/Backup-SqlDatabase.ps1
       - name: Set Environment Variables
         run: |
           az functionapp config appsettings set \
-            --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+            --resource-group "$RESOURCE_GROUP_NAME" \
             --name my-sql-backup-function \
-            --settings STORAGE_ACCOUNT_NAME=${{ env.STORAGE_ACCOUNT_NAME }} \
-                       STORAGE_ACCOUNT_KEY=${{ secrets.STORAGE_ACCOUNT_KEY }} \
+            --settings STORAGE_ACCOUNT_NAME="$STORAGE_ACCOUNT_NAME" \
+                       STORAGE_ACCOUNT_KEY="${{ secrets.STORAGE_ACCOUNT_KEY }}" \
                        CONTAINER_NAME=sql-backups
-
       - name: Run Backup Script
         uses: azure/CLI@v1
         with:
           inlineScript: |
             az functionapp run \
-              --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+              --resource-group "$RESOURCE_GROUP_NAME" \
               --name my-sql-backup-function \
               --function-name Backup-SqlDatabase
-
       - name: Run Cleanup Script
         uses: azure/CLI@v1
         with:
           inlineScript: |
             az functionapp run \
-              --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+              --resource-group "$RESOURCE_GROUP_NAME" \
               --name my-sql-backup-function \
               --function-name Remove-OldBackups
