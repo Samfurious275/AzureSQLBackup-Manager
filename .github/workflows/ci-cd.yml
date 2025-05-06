@@ -66,9 +66,24 @@ jobs:
         run: |
           terraform apply -auto-approve tfplan
 
+      - name: Export Terraform Outputs to Environment
+        id: export_outputs
+        run: |
+          set -e
+          echo "Exporting Terraform Outputs..."
+
+          RG_NAME=$(terraform output -raw resource_group_name)
+          STORAGE_NAME=$(terraform output -raw storage_account_name)
+
+          echo "RESOURCE_GROUP_NAME=$RG_NAME" >> $GITHUB_ENV
+          echo "STORAGE_ACCOUNT_NAME=$STORAGE_NAME" >> $GITHUB_ENV
+
+          echo "Terraform outputs exported successfully."
+
   nightly_backup:
     runs-on: ubuntu-latest
     environment: Production
+    needs: terraform_apply
     if: github.event_name == 'schedule'
     steps:
       - name: Azure Login
@@ -79,16 +94,16 @@ jobs:
       - name: Deploy Function App
         run: |
           az functionapp deployment source config-zip \
-            --resource-group ${{ terraform output -raw resource_group_name }} \
+            --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
             --name my-sql-backup-function \
             --src src/Backup-SqlDatabase.ps1
 
       - name: Set Environment Variables
         run: |
           az functionapp config appsettings set \
-            --resource-group ${{ terraform output -raw resource_group_name }} \
+            --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
             --name my-sql-backup-function \
-            --settings STORAGE_ACCOUNT_NAME=${{ terraform output -raw storage_account_name }} \
+            --settings STORAGE_ACCOUNT_NAME=${{ env.STORAGE_ACCOUNT_NAME }} \
                        STORAGE_ACCOUNT_KEY=${{ secrets.STORAGE_ACCOUNT_KEY }} \
                        CONTAINER_NAME=sql-backups
 
@@ -97,7 +112,7 @@ jobs:
         with:
           inlineScript: |
             az functionapp run \
-              --resource-group ${{ terraform output -raw resource_group_name }} \
+              --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
               --name my-sql-backup-function \
               --function-name Backup-SqlDatabase
 
@@ -106,6 +121,6 @@ jobs:
         with:
           inlineScript: |
             az functionapp run \
-              --resource-group ${{ terraform output -raw resource_group_name }} \
+              --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
               --name my-sql-backup-function \
               --function-name Remove-OldBackups
