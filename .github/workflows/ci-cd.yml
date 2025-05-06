@@ -16,7 +16,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Initialize Terraform
+      - name: Terraform Init
         run: |
           cd terraform
           terraform init
@@ -31,10 +31,6 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Initialize Terraform
-        run: |
-          cd terraform
-          terraform init
       - name: Terraform Plan
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -43,12 +39,8 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           cd terraform
+          terraform init
           terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v2
-        with:
-          name: tfplan
-          path: terraform/tfplan
 
   terraform_apply:
     needs: terraform_plan
@@ -61,11 +53,6 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v2
-        with:
-          name: tfplan
-          path: terraform
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -74,6 +61,7 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
           cd terraform
+          terraform init
           terraform apply -auto-approve tfplan
 
   nightly_backup:
@@ -88,11 +76,6 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v2
-        with:
-          name: tfplan
-          path: terraform
       - name: Initialize Terraform
         run: |
           cd terraform
