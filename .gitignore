@@ -1,0 +1,14 @@
+# .gitignore
+# Terraform state files
+terraform.tfstate
+terraform.tfstate.backup
+.terraform/
+*.tfstate.*
+*.log
+
+# Environment variables (if any)
+.env
+*.env
+
+# PowerShell script backups (if any)
+*.ps1.bak
