@@ -45,7 +45,7 @@ jobs:
           cd terraform
           terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
       - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v3.4.0
+        uses: actions/upload-artifact@v2
         with:
           name: tfplan
           path: terraform/tfplan
@@ -62,7 +62,7 @@ jobs:
         with:
           terraform_version: 1.5.0
       - name: Download Terraform Plan
-        uses: actions/download-artifact@v3.4.0
+        uses: actions/download-artifact@v2
         with:
           name: tfplan
           path: terraform
@@ -89,7 +89,7 @@ jobs:
         with:
           terraform_version: 1.5.0
       - name: Download Terraform Plan
-        uses: actions/download-artifact@v3.4.0
+        uses: actions/download-artifact@v2
         with:
           name: tfplan
           path: terraform
