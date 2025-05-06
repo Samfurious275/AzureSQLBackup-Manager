@@ -16,7 +16,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Change to Terraform Dir
+      - name: Initialize Terraform
         run: |
           cd terraform
           terraform init
@@ -31,7 +31,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Change to Terraform Dir
+      - name: Initialize Terraform
         run: |
           cd terraform
           terraform init
@@ -44,6 +44,11 @@ jobs:
         run: |
           cd terraform
           terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v3
+        with:
+          name: tfplan
+          path: terraform/tfplan
 
   terraform_apply:
     needs: terraform_plan
@@ -56,10 +61,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-      - name: Change to Terraform Dir
-        run: |
-          cd terraform
-          terraform init
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v3
+        with:
+          name: tfplan
+          path: terraform
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -82,6 +88,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v3
+        with:
+          name: tfplan
+          path: terraform
       - name: Initialize Terraform
         run: |
           cd terraform
