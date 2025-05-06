@@ -1,0 +1,111 @@
+name: Azure SQL Backup Manager CI/CD (Terraform)
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 22 * * *" # Run daily at 10 PM UTC
+
+jobs:
+  terraform_init:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        run: |
+          terraform init
+
+  terraform_plan:
+    needs: terraform_init
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Plan
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
+
+  terraform_apply:
+    needs: terraform_plan
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Apply
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          terraform apply -auto-approve tfplan
+
+  nightly_backup:
+    runs-on: ubuntu-latest
+    environment: Production
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Function App
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group ${{ terraform output -raw resource_group_name }} \
+            --name my-sql-backup-function \
+            --src src/Backup-SqlDatabase.ps1
+
+      - name: Set Environment Variables
+        run: |
+          az functionapp config appsettings set \
+            --resource-group ${{ terraform output -raw resource_group_name }} \
+            --name my-sql-backup-function \
+            --settings STORAGE_ACCOUNT_NAME=${{ terraform output -raw storage_account_name }} \
+                       STORAGE_ACCOUNT_KEY=${{ secrets.STORAGE_ACCOUNT_KEY }} \
+                       CONTAINER_NAME=sql-backups
+
+      - name: Run Backup Script
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az functionapp run \
+              --resource-group ${{ terraform output -raw resource_group_name }} \
+              --name my-sql-backup-function \
+              --function-name Backup-SqlDatabase
+
+      - name: Run Cleanup Script
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az functionapp run \
+              --resource-group ${{ terraform output -raw resource_group_name }} \
+              --name my-sql-backup-function \
+              --function-name Remove-OldBackups
