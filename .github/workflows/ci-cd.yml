@@ -22,19 +22,16 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init
-
   terraform_plan:
     needs: terraform_init
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-
       - name: Terraform Plan
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -42,6 +39,7 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
+          cd terraform  # ✅ Move into the Terraform directory
           terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
 
   terraform_apply:
@@ -51,12 +49,10 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
-
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -64,22 +60,9 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
         run: |
+          cd terraform  # ✅ Move into the Terraform directory
           terraform apply -auto-approve tfplan
-
-      - name: Export Terraform Outputs to Environment
-        id: export_outputs
-        run: |
-          set -e
-          echo "Exporting Terraform Outputs..."
-
-          RG_NAME=$(terraform output -raw resource_group_name)
-          STORAGE_NAME=$(terraform output -raw storage_account_name)
-
-          echo "RESOURCE_GROUP_NAME=$RG_NAME" >> $GITHUB_ENV
-          echo "STORAGE_ACCOUNT_NAME=$STORAGE_NAME" >> $GITHUB_ENV
-
-          echo "Terraform outputs exported successfully."
-
+          
   nightly_backup:
     runs-on: ubuntu-latest
     environment: Production
