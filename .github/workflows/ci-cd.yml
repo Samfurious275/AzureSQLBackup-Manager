@@ -41,8 +41,7 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
-
+          terraform plan -out=tfplan -var "sql_admin_password=$(terraform output -raw sql_password)"
   terraform_apply:
     needs: terraform_plan
     runs-on: ubuntu-latest
