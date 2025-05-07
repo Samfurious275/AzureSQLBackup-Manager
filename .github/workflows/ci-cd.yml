@@ -12,10 +12,20 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
+      - name: Validate Password Complexity
+        run: |
+          if [[ "${{ secrets.SQL_ADMIN_PASSWORD }}" =~ ^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%&*()-_=+\[\]{}|:?/~]).{12,}$ ]]; then
+            echo "Password is valid."
+          else
+            echo "Error: Password does not meet Azure requirements." && exit 1
+          fi
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
       - name: Terraform Init
         run: |
           cd terraform
@@ -24,14 +34,15 @@ jobs:
   terraform_plan:
     needs: terraform_init
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
       - name: Terraform Plan
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -41,7 +52,8 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -out=tfplan -var "sql_admin_password=$(terraform output -raw sql_password)"
+          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
+
   terraform_apply:
     needs: terraform_plan
     runs-on: ubuntu-latest
@@ -49,10 +61,12 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -62,7 +76,7 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"  # Re-run plan to avoid missing tfplan
+          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
           terraform apply -auto-approve tfplan
 
   nightly_backup:
@@ -73,26 +87,32 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
       - name: Initialize Terraform
         run: |
           cd terraform
           terraform init
+
       - name: Export Resource Group Name
         run: |
           cd terraform
           echo "RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)" >> $GITHUB_ENV
+
       - name: Export Storage Account Name
         run: |
           cd terraform
           echo "STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> $GITHUB_ENV
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Deploy Function App
         run: |
           cd terraform
@@ -100,6 +120,7 @@ jobs:
             --resource-group "$RESOURCE_GROUP_NAME" \
             --name my-sql-backup-function \
             --src ../src/Backup-SqlDatabase.ps1
+
       - name: Set Environment Variables
         run: |
           az functionapp config appsettings set \
@@ -108,7 +129,7 @@ jobs:
             --settings STORAGE_ACCOUNT_NAME="$STORAGE_ACCOUNT_NAME" \
                        STORAGE_ACCOUNT_KEY="${{ secrets.STORAGE_ACCOUNT_KEY }}" \
                        CONTAINER_NAME=sql-backups
-                       
+
       - name: Run Backup Script
         uses: azure/CLI@v1
         with:
@@ -117,6 +138,7 @@ jobs:
               --resource-group "$RESOURCE_GROUP_NAME" \
               --name my-sql-backup-function \
               --function-name Backup-SqlDatabase
+
       - name: Run Cleanup Script
         uses: azure/CLI@v1
         with:
