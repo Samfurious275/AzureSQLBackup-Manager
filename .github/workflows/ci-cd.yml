@@ -108,6 +108,7 @@ jobs:
             --settings STORAGE_ACCOUNT_NAME="$STORAGE_ACCOUNT_NAME" \
                        STORAGE_ACCOUNT_KEY="${{ secrets.STORAGE_ACCOUNT_KEY }}" \
                        CONTAINER_NAME=sql-backups
+                       
       - name: Run Backup Script
         uses: azure/CLI@v1
         with:
