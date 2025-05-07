@@ -24,6 +24,7 @@ jobs:
   terraform_plan:
     needs: terraform_init
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
