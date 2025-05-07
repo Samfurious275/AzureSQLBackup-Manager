@@ -36,7 +36,7 @@ module "sql" {
   resource_group_name = module.sql.resource_group_name  # ✅ Pass SQL module's output
   location            = module.sql.resource_group_location  
   admin_username      = "sqladmin"
-  admin_password      = var.sql_admin_password  # Now defined in variables.tf
+  admin_password      = random_password.sql_password.result
   database_name       = "mydb"
   environment         = var.environment         # Pass environment variable
   sql_admin_password  = var.sql_admin_password
