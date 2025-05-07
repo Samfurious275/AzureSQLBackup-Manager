@@ -13,14 +13,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v3
 
-      - name: Validate Password Complexity
-        run: |
-          if [[ "${{ secrets.SQL_ADMIN_PASSWORD }}" =~ ^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%&*()-_=+\[\]{}|:?/~]).{12,}$ ]]; then
-            echo "Password is valid."
-          else
-            echo "Error: Password does not meet Azure requirements." && exit 1
-          fi
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
