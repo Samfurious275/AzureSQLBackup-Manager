@@ -4,7 +4,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: "30 21 * * *"  # Run daily at 10 PM UTC
+    - cron: "30 21 * * *"  # Daily at 10 PM UTC
 
 jobs:
   terraform_init:
@@ -17,6 +17,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}  # Must be valid Azure Service Principal
 
       - name: Terraform Init
         run: |
@@ -34,6 +39,11 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.0
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Terraform Plan
         env:
@@ -59,6 +69,11 @@ jobs:
         with:
           terraform_version: 1.5.0
 
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Terraform Apply
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -68,7 +83,6 @@ jobs:
         run: |
           cd terraform
           terraform init
-          terraform plan -out=tfplan -var "sql_admin_password=${{ secrets.SQL_ADMIN_PASSWORD }}"
           terraform apply -auto-approve tfplan
 
   nightly_backup:
@@ -85,28 +99,25 @@ jobs:
         with:
           terraform_version: 1.5.0
 
-      - name: Initialize Terraform (Remote State)
-        run: |
-          cd terraform
-          terraform init
-
-      - name: Export Outputs
-        run: |
-          cd terraform
-          echo "RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)" >> $GITHUB_ENV
-          echo "STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> $GITHUB_ENV
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Remaining steps unchanged...
+      - name: Initialize Terraform (Remote State)
+        run: |
+          cd terraform
+          terraform init
+
+      - name: Export Resource Group Name
+        run: |
+          cd terraform
+          echo "RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)" >> $GITHUB_ENV
+
+      - name: Export Storage Account Name
+        run: |
+          cd terraform
+          echo "STORAGE_ACCOUNT_NAME=$(terraform output -raw storage_account_name)" >> $GITHUB_ENV
 
       - name: Deploy Function App
         run: |
@@ -141,4 +152,4 @@ jobs:
             az functionapp run \
               --resource-group "$RESOURCE_GROUP_NAME" \
               --name my-sql-backup-function \
-              --function-name Remove-OldBackups
+              --function-name CleanupOldBackups
